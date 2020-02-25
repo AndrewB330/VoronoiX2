@@ -1,4 +1,4 @@
-# ![Demo](/resources/vx_logo.png?raw=true) VoronoiX (IN DEV) 
+# ![Demo](/resources/vx_logo_v1.png?raw=true) VoronoiX (IN DEV) 
 
 __VoronoiX__ (or VX) - __C++__ library, with __JS__ interface on 
 top of it, that allows to work with different data structures and 
