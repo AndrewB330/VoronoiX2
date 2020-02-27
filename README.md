@@ -6,6 +6,7 @@ algorithms related to Voronoi diagram, Delaunay triangulation and
 other geometric structures. 
 
 ### Features
+- [x] QHull algorithm
 - [ ] Support of various spaces
     - [ ] 2D Plane
     - [ ] 3D Plane
@@ -22,6 +23,8 @@ other geometric structures.
 - [ ] Robustness (HOPEFULLY :D )
 - [ ] C++ library
 - [ ] JS binding
+### QHull
+ ![Demo](/resources/qhull_1.png?raw=true)
 ### Build
 ### Use
 ### Contribution

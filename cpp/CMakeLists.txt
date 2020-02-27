@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.14)
 project(VoronoiX)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--stack,2000000000")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--stack,1000000000")
 
 set(
         HEADER_FILES
         include/vx/core.hpp
+        include/vx/math/vec.hpp
+        include/vx/math/mat.hpp
+        include/vx/math/qhull.hpp
+        include/vx/math/geometry.hpp
+        include/vx/model/graph.hpp
 )
 
 set(
