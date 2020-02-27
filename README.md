@@ -23,8 +23,13 @@ other geometric structures.
 - [ ] Robustness (HOPEFULLY :D )
 - [ ] C++ library
 - [ ] JS binding
-### QHull
- ![Demo](/resources/qhull_1.png?raw=true)
+### GIFs
+Convex hull of points randomly distributed on sphere 
+![Sphere](/resources/3d_convex.gif?raw=true)
+Convex hull of points projected from a plane onto a paraboloid. 
+The edges of this convex hull corresponds to the edges of Delaunay triangulation 
+on 2D plane.
+![Paraboloid](/resources/3d_paraboloid.gif?raw=true)
 ### Build
 ### Use
 ### Contribution

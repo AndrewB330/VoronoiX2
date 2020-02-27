@@ -53,6 +53,11 @@ namespace vx {
                     }
                 }
                 double volume = det(gramian_matrix);
+                /*if (DIM + 1 == CNT) {
+                    Mat<T, DIM, DIM> basis;
+                    for(size_t i = 0; i < DIM; i++) basis.set_row(i, ctx.p[res_vec[i]] - ctx.p[i]);
+                    volume = sdet(basis);
+                }*/
                 if (volume > max_volume) {
                     max_volume = volume;
                     max_volume_index = i;
@@ -121,9 +126,9 @@ namespace vx {
                 if (!(dot(ctx->p[v], normal) < offset + ctx->tigh_eps &&
                       dot(ctx->p[v], normal) > offset - ctx->tigh_eps &&
                       "Face vertices must satisfy plane equation")) {
-                    std::cout << ctx->p[vertices[0]] << std::endl;
+                    /*std::cout << ctx->p[vertices[0]] << std::endl;
                     std::cout << ctx->p[vertices[1]] << std::endl;
-                    std::cout << "ohh" << std::endl;
+                    std::cout << "ohh" << std::endl;*/
                 }
             }
         }
@@ -345,28 +350,45 @@ namespace vx {
             return true;
         }
 
-        void save_obj(const std::string &filename) {
-            assert(DIM == 3);
-            std::ofstream out(filename);
-            for (auto p : ctx.p) {
-                out << "v " << p[0] << " " << p[1] << " " << p[2] << std::endl;
-            }
-            for (auto f : facets) {
-                out << "f " << f.vertices[0] + 1 << " " << f.vertices[0] + 2 << " " << f.vertices[0] + 3 << std::endl;
-            }
-        }
-
         void save_json(const std::string &filename) {
-            assert(DIM == 3);
             std::ofstream out(filename);
-            for (auto p : ctx.p) {
-                out << "[" << p[0] << "," << p[1] << "," << p[2] << "]," << std::endl;
+            if (DIM == 4) {
+                out << "let data = { \"v\":[\n";
+                for (auto p : ctx.p) {
+                    out << "[" << p[0] << "," << p[1] << "," << p[2] << "]," << std::endl;
+                }
+                out << "], \"f\": [\n";
+                for (auto f : facets) {
+                    if (f.normal[DIM - 1] < 0)
+                    {
+                        out << "[" << f.vertices[0] << ", " << f.vertices[1] << ", " << f.vertices[2] << "],"
+                            << std::endl;
+                        out << "[" << f.vertices[0] << ", " << f.vertices[1] << ", " << f.vertices[3] << "],"
+                            << std::endl;
+                        out << "[" << f.vertices[0] << ", " << f.vertices[2] << ", " << f.vertices[3] << "],"
+                            << std::endl;
+                        out << "[" << f.vertices[1] << ", " << f.vertices[2] << ", " << f.vertices[3] << "],"
+                            << std::endl;
+                    }
+                }
+                out << "]}";
             }
-            out << std::endl;
-            for (auto f : facets) {
-                out << "[" << f.vertices[0] << ", " << f.vertices[1] << ", " << f.vertices[2] << "],"
-                    << std::endl;
+            if (DIM == 3) {
+                out << "let data = { \"v\":[\n";
+                for (auto p : ctx.p) {
+                    out << "[" << p[0] << "," << p[1] << "," << p[2] << "]," << std::endl;
+                }
+                out << "[0,0,0]], \"f\": [\n";
+                for (size_t i = 0; i < facets.size(); i++) {
+                    auto f = facets[i];
+                    //if (f.normal[DIM - 1] < 0)
+                        out << "[" << f.vertices[0] << ", " << f.vertices[1] << ", " << f.vertices[2]
+                            << (i + 1 == facets.size() ? "]": "],")
+                            << std::endl;
+                }
+                out << "]}";
             }
+
         }
 
     };
