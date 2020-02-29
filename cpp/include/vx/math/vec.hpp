@@ -111,6 +111,22 @@ namespace vx {
     }
 
     template<typename T, size_t DIM>
+    bool operator<(const Vec<T, DIM> &a, const Vec<T, DIM> &b) {
+        for(size_t i = 0; i < DIM; i++) {
+            if (a[i] != b[i]) return a[i] < b[i];
+        }
+        return false;
+    }
+
+    template<typename T, size_t DIM>
+    bool operator==(const Vec<T, DIM> &a, const Vec<T, DIM> &b) {
+        for(size_t i = 0; i < DIM; i++) {
+            if (a[i] != b[i]) return false;
+        }
+        return true;
+    }
+
+    template<typename T, size_t DIM>
     T length_square(const Vec<T, DIM> &v) {
         T res = T();
         for (size_t i = 0; i < DIM; i++) res += v[i] * v[i];

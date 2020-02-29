@@ -6,58 +6,37 @@
 #include <queue>
 #include <set>
 #include <fstream>
+#include <unordered_map>
+#include <unordered_set>
+#include <ctime>
 #include "vec.hpp"
+#include "geometry.hpp"
 
 namespace vx {
 
     const int ulp = 1024 * 128;
 
-    template<typename T, size_t DIM>
-    struct Context {
-        size_t n; // number of points
-        const std::vector<vx::Vec<T, DIM>> &p; // points
-        vx::Vec<T, DIM> c; // centroid
-        T eps = std::numeric_limits<T>::epsilon() * ulp;
-        T tigh_eps = std::numeric_limits<T>::epsilon() * (ulp / 4);
-        T span = T(1);
-
-        explicit Context(const std::vector<vx::Vec<T, DIM>> &points) : p(points) {
-            for (const auto &v : points) c += v;
-            c /= points.size();
-            n = points.size();
-            span = T(0);
-            for (const auto &v : points) span = std::max(span, 2 * dist(c, v));
-            eps = span * (std::numeric_limits<T>::epsilon() * ulp);
-            tigh_eps = span * (std::numeric_limits<T>::epsilon() * (ulp / 4));
-        }
-    };
-
     template<typename T, size_t DIM, size_t CNT>
     struct BiggestSimplexBuilder {
-        const Context<T, DIM> &ctx;
+        const std::vector<Vec<T, DIM>> &pts;
 
-        explicit BiggestSimplexBuilder(const Context<T, DIM> &ctx) : ctx(ctx) {}
+        explicit BiggestSimplexBuilder(const std::vector<Vec<T, DIM>> &pts) : pts(pts) {}
 
         std::set<size_t> get_biggest_simplex() {
-            BiggestSimplexBuilder<T, DIM, CNT - 1> simplex_builder(ctx);
+            BiggestSimplexBuilder<T, DIM, CNT - 1> simplex_builder(pts);
             auto res = simplex_builder.get_biggest_simplex();
             std::vector<size_t> res_vec(res.begin(), res.end());
             T max_volume = T(0);
-            size_t max_volume_index = ctx.p.size();
-            for (size_t i = 0; i < ctx.n; i++) {
+            size_t max_volume_index = pts.size();
+            for (size_t i = 0; i < pts.size(); i++) {
                 if (res.find(i) != res.end()) continue;
                 vx::Mat<T, CNT - 1, CNT - 1> gramian_matrix;
                 for (size_t ii = 0; ii < CNT - 1; ii++) {
                     for (size_t jj = 0; jj < CNT - 1; jj++) {
-                        gramian_matrix[ii][jj] = dot(ctx.p[res_vec[ii]] - ctx.p[i], ctx.p[res_vec[jj]] - ctx.p[i]);
+                        gramian_matrix[ii][jj] = dot(pts[res_vec[ii]] - pts[i], pts[res_vec[jj]] - pts[i]);
                     }
                 }
                 double volume = det(gramian_matrix);
-                /*if (DIM + 1 == CNT) {
-                    Mat<T, DIM, DIM> basis;
-                    for(size_t i = 0; i < DIM; i++) basis.set_row(i, ctx.p[res_vec[i]] - ctx.p[i]);
-                    volume = sdet(basis);
-                }*/
                 if (volume > max_volume) {
                     max_volume = volume;
                     max_volume_index = i;
@@ -70,15 +49,18 @@ namespace vx {
 
     template<typename T, size_t DIM>
     struct BiggestSimplexBuilder<T, DIM, 1> {
-        const Context<T, DIM> &ctx;
+        const std::vector<Vec<T, DIM>> &pts;
 
-        explicit BiggestSimplexBuilder(const Context<T, DIM> &ctx) : ctx(ctx) {}
+        explicit BiggestSimplexBuilder(const std::vector<Vec<T, DIM>> &pts) : pts(pts) {}
 
         std::set<size_t> get_biggest_simplex() {
             T max_dist = T(0);
             size_t max_dist_index = 0;
-            for (size_t i = 0; i < ctx.n; i++) {
-                T dist = dist_square(ctx.c, ctx.p[i]);
+            Vec<T, DIM> c;
+            for (auto p: pts) c += p;
+            c /= pts.size();
+            for (size_t i = 0; i < pts.size(); i++) {
+                T dist = dist_square(c, pts[i]);
                 if (dist > max_dist) {
                     max_dist = dist;
                     max_dist_index = i;
@@ -92,73 +74,41 @@ namespace vx {
 
     template<typename T, size_t DIM>
     struct Facet {
-        const Context<T, DIM> *ctx;
+        using FacetPtr = std::shared_ptr<Facet<T, DIM>>;
         size_t vertices[DIM] = {};
-        size_t neighbours[DIM] = {};
+        FacetPtr neighbours[DIM] = {};
 
         size_t furthest = 0;
         T furthest_dist = T(0);
         std::vector<size_t> outside;
         std::vector<size_t> coplanar;
 
-        Vec <T, DIM> normal;
-        T offset = T(0);
+        HalfSpace<T, DIM> half_space;
 
-        explicit Facet(const Context<T, DIM> &ctx) : ctx(&ctx) {}
+        explicit Facet() {}
 
-        void update_equation() {
-            Mat<T, DIM, DIM> mat;
-            for (size_t i = 0; i < DIM; i++) {
-                mat.set_col(i, ctx->p[vertices[i]]);
-            }
-            offset = det(mat);
-            Mat<T, DIM, DIM> mat_copy;
-            for (size_t i = 0; i < DIM; i++) {
-                mat_copy = mat;
-                mat_copy.set_row(i, vec_ones<T, DIM>());
-                normal[i] = det(mat_copy);
-            }
-            T d = length(normal);
-            normal /= d;
-            offset /= d;
-            for (size_t v : vertices) {
-
-                if (!(dot(ctx->p[v], normal) < offset + ctx->tigh_eps &&
-                      dot(ctx->p[v], normal) > offset - ctx->tigh_eps &&
-                      "Face vertices must satisfy plane equation")) {
-                    /*std::cout << ctx->p[vertices[0]] << std::endl;
-                    std::cout << ctx->p[vertices[1]] << std::endl;
-                    std::cout << "ohh" << std::endl;*/
-                }
-            }
+        void replaceNeighbour(FacetPtr old, FacetPtr current) {
+            auto it = std::find(neighbours, neighbours + DIM, old);
+            VX_ASSERT(it != neighbours + DIM, "Whops");
+            *it = current;
         }
 
-        void update_outer_vertices() {
-            for (size_t i = 0; i < ctx->n; i++) {
-                if (check_coplanar(i)) {
-                    coplanar.push_back(i);
-                } else if (check_outside(i)) {
-                    outside.push_back(i);
-                    T cur_dist = dist(i);
-                    if (cur_dist > furthest_dist) {
-                        furthest_dist = cur_dist;
-                        furthest = i;
-                    }
-                }
-            }
+        void updateHalfSpace(const std::vector<Vec<T, DIM>> &p, const GeometryContext<T> &ctx) {
+            std::vector<Vec<T, DIM>> basis(DIM);
+            for (size_t i = 0; i < DIM; i++)
+                basis[i] = p.at(vertices[i]);
+            half_space = makeHalfSpace(basis, ctx);
         }
 
-        void update_outer_vertices(const Facet &parent) {
-            for (size_t i = 0; i < ctx->n; i++) {
-                if (check_coplanar(i)) {
-                    coplanar.push_back(i);
-                } else if (check_outside(i)) {
-                    outside.push_back(i);
-                    T cur_dist = dist(i);
-                    if (cur_dist > furthest_dist) {
-                        furthest_dist = cur_dist;
-                        furthest = i;
-                    }
+        void checkAndPutVertex(size_t i, const Vec<T, DIM> &v) {
+            if (isCoplanar(v)) {
+                //coplanar.push_back(i);
+            } else if (isOutside(v)) {
+                outside.push_back(i);
+                T cur_dist = dist(v);
+                if (cur_dist > furthest_dist) {
+                    furthest_dist = cur_dist;
+                    furthest = i;
                 }
             }
         }
@@ -166,75 +116,113 @@ namespace vx {
         void flip() {
             std::swap(vertices[0], vertices[1]);
             std::swap(neighbours[0], neighbours[1]);
-            normal = -normal;
-            offset = -offset;
+            half_space.flip();
         }
 
-        T dist(size_t vertex) const {
-            return vx::dot(ctx->p[vertex], normal) - offset;
+        T dist(const Vec<T, DIM> &v) const {
+            return half_space.orientedDistance(v);
         }
 
-        bool check_outside(size_t vertex) const {
-            return dot(ctx->p[vertex], normal) > offset + ctx->eps;
+        bool isOutside(const Vec<T, DIM> &v) const {
+            return half_space.isAbove(v);
         }
 
-        bool check_outside(const Vec <T, DIM> &v) const {
-            return dot(v, normal) > offset + ctx->eps;
-        }
-
-        bool check_coplanar(size_t vertex) const {
-            return dot(ctx->p[vertex], normal) <= offset + ctx->eps &&
-                   dot(ctx->p[vertex], normal) >= offset - ctx->eps;
-        }
-
-        bool check_coplanar(const Vec <T, DIM> &v) const {
-            return dot(v, normal) <= offset + ctx->eps &&
-                   dot(v, normal) >= offset - ctx->eps;
+        bool isCoplanar(const Vec<T, DIM> &v) const {
+            return half_space.isOn(v);
         }
     };
 
     template<typename T, size_t DIM>
+    struct Ridge {
+        size_t vertices[DIM - 1];
+
+        Ridge(const std::shared_ptr<Facet<T, DIM>> facet, size_t side) {
+            auto ptr = vertices;
+            for (size_t i = 0; i < DIM; i++) {
+                if (i != side) {
+                    *(ptr++) = facet->vertices[i];
+                }
+            }
+            std::sort(vertices, vertices + DIM - 1);
+        }
+
+        bool operator==(const Ridge &r) const {
+            return std::equal(vertices, vertices + DIM - 1, r.vertices);
+        }
+    };
+
+
+    template<typename T, size_t DIM>
+    struct RidgeHasher {
+        size_t operator()(const Ridge<T, DIM> &r) const {
+            size_t h = 0;
+            for (size_t i = 0; i < DIM - 1; i++) {
+                h ^= (r.vertices[i] * 331) ^ (r.vertices[i]);
+            }
+            return h;
+        }
+    };
+
+    template<typename T, size_t DIM>
+    bool operator<(const Facet<T, DIM> &a, const Facet<T, DIM> &b) {
+        return a.furthest_dist > b.furthest_dist;
+    }
+
+    template<typename T, size_t DIM>
     struct QHull {
 
-        Context<T, DIM> ctx;
-        std::vector<Facet<T, DIM>> facets;
+        Vec<T, DIM> inside;
+        GeometryContext<T> ctx;
+        std::vector<Vec<T, DIM>> points;
+        std::set<std::shared_ptr<Facet<T, DIM>>> facet_candidates;
+        std::unordered_set<std::shared_ptr<Facet<T, DIM>>> facets;
 
-        explicit QHull(const std::vector<vx::Vec<T, DIM>> &points) : ctx(points) {
-            facets = get_initial_facets();
-            std::cout << ctx.p.size() << std::endl;
-            for (size_t facet = choose_facet(); facet < facets.size(); facet = choose_facet()) {
-                size_t furthest_vertex = facets[facet].furthest;
-                std::vector<size_t> visible_set;
-                std::vector<char> visited(facets.size(), 0);
-                std::queue<size_t> queue;
-                queue.push(facet);
+
+        void addFacet(const std::shared_ptr<Facet<T, DIM>> &facet) {
+            facets.insert(facet);
+            if (!facet->outside.empty())
+                facet_candidates.insert(facet);
+        }
+
+        void deleteFacet(const std::shared_ptr<Facet<T, DIM>> &facet) {
+            facet_candidates.erase(facet);
+            facets.erase(facet);
+            for (size_t i = 0; i < DIM; i++) {
+                facet->neighbours[i] = nullptr;
+            }
+        }
+
+        explicit QHull(const std::vector<vx::Vec<T, DIM>> &points) : points(points) {
+            std::cout << std::clock() * 1.0 / CLOCKS_PER_SEC << std::endl;
+            VX_ASSERT(points.size() > DIM, "Number of points should be at least DIM+1 for QHull algrithm");
+            buildInitialFacets();
+
+            std::unordered_set<size_t> outside_vertex_candidates{};
+            while (!facet_candidates.empty()) {
+                outside_vertex_candidates.clear();
+                auto facet = *facet_candidates.begin();
+                size_t furthest_vertex = facet->furthest;
+
+                std::vector<std::shared_ptr<Facet<T, DIM>>> visible_set;
+
+                std::unordered_map<std::shared_ptr<Facet<T, DIM>>, bool> visited = {};
+                std::queue<std::shared_ptr<Facet<T, DIM>>> queue;
+
                 visited[facet] = true;
-                std::vector<Facet<T, DIM>> new_facets;
-                std::vector<size_t *> new_facets_neighbours;
+                queue.push(facet);
 
+                std::vector<std::pair<std::shared_ptr<Facet<T, DIM>>, size_t>> ridges;
+
+                // BFS on visible facets
                 while (!queue.empty()) {
-                    size_t current_facet = queue.front();
+                    auto current_facet = queue.front();
                     queue.pop();
                     visible_set.push_back(current_facet);
+                    for (auto v : current_facet->outside) outside_vertex_candidates.insert(v);
                     for (size_t i = 0; i < DIM; i++) {
-                        size_t neighbour = facets[current_facet].neighbours[i];
-                        if (!facets[neighbour].check_outside(furthest_vertex)) {
-                            Facet ridge = facets[current_facet];
-                            //std::fill(ridge.neighbours, ridge.neighbours + DIM, facets.size());
-                            ridge.vertices[i] = furthest_vertex;
-                            ridge.neighbours[i] = neighbour;
-                            ridge.outside.clear();
-                            ridge.coplanar.clear();
-                            ridge.furthest_dist = T(0);
-                            new_facets.push_back(ridge);
-                            size_t index = std::find(facets[neighbour].neighbours,
-                                                     facets[neighbour].neighbours + DIM,
-                                                     current_facet)
-                                           - facets[neighbour].neighbours;
-                            new_facets_neighbours.push_back(&facets[neighbour].neighbours[index]);
-                            if (ridge.check_outside(ctx.c)) {
-                                std::cout << ctx.p.size() << std::endl;
-                            }
+                        auto neighbour = current_facet->neighbours[i];
+                        if (!neighbour->isOutside(points[furthest_vertex])) {
+                            ridges.emplace_back(current_facet, i);
                         } else if (!visited[neighbour]) {
                             queue.push(neighbour);
                             visited[neighbour] = true;
@@ -242,97 +230,103 @@ namespace vx {
                     }
                 }
 
-                std::vector<size_t> new_ids = visible_set;
-                for (size_t i = 0; i + visible_set.size() < new_facets.size(); i++)
-                    new_ids.push_back(facets.size() + i);
+                std::vector<std::shared_ptr<Facet<T, DIM>>> new_facets;
 
-                for (size_t cur_facet = 0; cur_facet < new_facets.size(); cur_facet++) {
-                    *new_facets_neighbours[cur_facet] = new_ids[cur_facet];
-                    for (size_t other_facet = 0; other_facet < new_facets.size(); other_facet++) {
-                        if (other_facet == cur_facet) continue;
-                        std::vector<size_t> tmp_vertices(new_facets[cur_facet].vertices,
-                                                         new_facets[cur_facet].vertices + DIM);
-                        std::vector<size_t> tmp_vertices_2(new_facets[other_facet].vertices,
-                                                           new_facets[other_facet].vertices + DIM);
-                        std::sort(tmp_vertices.begin(),
-                                  tmp_vertices.end());
-                        std::sort(tmp_vertices_2.begin(),
-                                  tmp_vertices_2.end());
-                        auto end = std::set_difference(tmp_vertices.begin(),
-                                                       tmp_vertices.end(),
-                                                       tmp_vertices_2.begin(),
-                                                       tmp_vertices_2.end(),
-                                                       tmp_vertices.begin());
-                        tmp_vertices.erase(end, tmp_vertices.end());
-                        if (tmp_vertices.size() == 1) {
-                            size_t index = std::find(new_facets[cur_facet].vertices,
-                                                     new_facets[cur_facet].vertices + DIM,
-                                                     tmp_vertices[0]) - new_facets[cur_facet].vertices;
-                            new_facets[cur_facet].neighbours[index] = new_ids[other_facet];
-                        }
-                    }
-                    new_facets[cur_facet].update_equation();
-                    for (size_t visible_facet : visible_set) {
-                        new_facets[cur_facet].update_outer_vertices(facets[visible_facet]);
-                    }
+                for (auto[facet, connection] : ridges) {
+                    auto old_facet = facet;
+                    auto new_facet = std::make_shared<Facet<T, DIM>>();
+
+                    std::copy_n(old_facet->vertices, DIM, new_facet->vertices);
+                    new_facet->vertices[connection] = furthest_vertex;
+                    new_facet->neighbours[connection] = old_facet->neighbours[connection];
+                    new_facet->neighbours[connection]->replaceNeighbour(old_facet, new_facet);
+
+                    new_facet->updateHalfSpace(points, ctx);
+
+                    new_facet->outside.reserve(outside_vertex_candidates.size() / 2);
+                    for (size_t i : outside_vertex_candidates)
+                        new_facet->checkAndPutVertex(i, points[i]);
+                    // TODO: should we check only candidates?not all?
+
+                    new_facets.push_back(new_facet);
+                    addFacet(new_facet);
+                    VX_ASSERT(!new_facet->isOutside(inside), "New facet should be directed outside");
                 }
-                for (size_t i = 0; i < new_facets.size(); i++) {
-                    if (new_ids[i] < facets.size())
-                        facets[new_ids[i]] = new_facets[i];
-                    else
-                        facets.push_back(new_facets[i]);
-                }
+
+                connectAllNewFacets(new_facets);
+
+                for (auto to_delete: visible_set) deleteFacet(to_delete);
+
+                //std::cout << facets.size() << std::endl;
+                /*for (auto f: facets) {
+                    for (size_t j = 0; j < DIM; j++) {
+                        auto n = f->neighbours[j];
+                        VX_ASSERT(n != nullptr, "No neighbour");
+                        auto it = std::find(n->neighbours, n->neighbours + DIM, f);
+                        VX_ASSERT(it != n->neighbours + DIM, "Neighbours not consistent");
+                    }
+                }*/
+                //VX_ASSERT(isConvex(), "Not convex");
             }
-            assert(check_hull());
-            assert(check_convex());
+            std::cout << std::clock() * 1.0 / CLOCKS_PER_SEC << std::endl;
+            VX_ASSERT(isBounded(), "Not bounded");
+            VX_ASSERT(isConvex(), "Not convex");
         }
 
-        size_t choose_facet() {
-            T best_facet_dist = 0;
-            size_t best_facet = facets.size();
-            for (size_t i = 0; i < facets.size(); i++) {
-                if (!facets[i].outside.empty() && facets[i].furthest_dist > best_facet_dist) {
-                    best_facet_dist = facets[i].furthest_dist;
-                    best_facet = i;
+        void connectAllNewFacets(const std::vector<std::shared_ptr<Facet<T, DIM>>> &new_facets) {
+            using RidgeInfo = std::pair<std::shared_ptr<Facet<T, DIM>>, size_t>;
+            std::unordered_map<Ridge<T, DIM>, RidgeInfo, RidgeHasher<T, DIM>> ridge_map{};
+            for (auto facet : new_facets) {
+                for (size_t side = 0; side < DIM; side++) {
+                    auto ridge = Ridge<T, DIM>(facet, side);
+                    if (ridge_map.find(ridge) != ridge_map.end()) {
+                        auto[other_facet, other_side] = ridge_map[ridge];
+                        other_facet->neighbours[other_side] = facet;
+                        facet->neighbours[side] = other_facet;
+                    } else {
+                        ridge_map[ridge] = {facet, side};
+                    }
                 }
             }
-            return best_facet;
         }
 
-        std::vector<Facet<T, DIM>> get_initial_facets() {
-            std::vector<Facet<T, DIM>> res;
-            BiggestSimplexBuilder<T, DIM, DIM + 1> biggest_simplex(ctx);
+        void buildInitialFacets() {
+            BiggestSimplexBuilder<T, DIM, DIM + 1> biggest_simplex(points);
             auto simplex = biggest_simplex.get_biggest_simplex();
             std::vector<size_t> simplex_vec(simplex.begin(), simplex.end());
 
-            Vec<T, DIM> centroid;
-            for (auto v : simplex) centroid += ctx.p[v];
-            centroid /= simplex.size();
-            ctx.c = centroid;
+            for (auto v : simplex)
+                inside += points[v];
+            inside /= simplex.size();
 
+            std::vector<std::shared_ptr<Facet<T, DIM>>> pool(simplex_vec.size());
+            for (size_t i = 0; i < simplex_vec.size(); i++) {
+                pool[i] = std::make_shared<Facet<T, DIM>>();
+            }
             for (size_t k = 0; k < simplex_vec.size(); k++) {
-                Facet<T, DIM> facet(ctx);
+                auto facet = pool[k];
                 for (size_t i = 0; i < DIM + 1; i++) {
                     if (i != k) {
                         size_t ii = i - (i > k);
-                        facet.vertices[ii] = simplex_vec[i];
-                        facet.neighbours[ii] = i;
+                        facet->vertices[ii] = simplex_vec[i];
+                        facet->neighbours[ii] = pool[i];
                     }
                 }
-                facet.update_equation();
-                if (facet.check_outside(ctx.c)) {
-                    facet.flip();
+                facet->updateHalfSpace(points, ctx);
+                if (facet->isOutside(inside)) {
+                    facet->flip();
                 }
-                facet.update_outer_vertices();
-                res.push_back(facet);
+                for (size_t i = 0; i < points.size(); i++)
+                    facet->checkAndPutVertex(i, points[i]);
+                addFacet(facet);
             }
-            return res;
         }
 
-        bool check_convex() const {
-            for (size_t i = 0; i < facets.size(); i++) {
+        bool isConvex() const {
+            // TODO: in general this does not guarantee an overall convexity. Only local convexity is checked
+            for (auto f : facets) {
                 for (size_t j = 0; j < DIM; j++) {
-                    if (facets[facets[i].neighbours[j]].check_outside(facets[i].vertices[j])) {
+                    if (f->neighbours[j]->isOutside(points[f->vertices[j]])) {
                         return false;
                     }
                 }
@@ -340,11 +334,12 @@ namespace vx {
             return true;
         }
 
-        bool check_hull() const {
-            for (size_t facet = 0; facet < facets.size(); facet++) {
-                for (size_t i = 0; i < ctx.n; i++) {
-                    if (facets[facet].check_outside(i))
+        bool isBounded() const {
+            for (auto f : facets) {
+                for (auto v: points) {
+                    if (f->isOutside(v)) {
                         return false;
+                    }
                 }
             }
             return true;
@@ -354,20 +349,19 @@ namespace vx {
             std::ofstream out(filename);
             if (DIM == 4) {
                 out << "let data = { \"v\":[\n";
-                for (auto p : ctx.p) {
+                for (auto p : points) {
                     out << "[" << p[0] << "," << p[1] << "," << p[2] << "]," << std::endl;
                 }
                 out << "], \"f\": [\n";
                 for (auto f : facets) {
-                    if (f.normal[DIM - 1] < 0)
-                    {
-                        out << "[" << f.vertices[0] << ", " << f.vertices[1] << ", " << f.vertices[2] << "],"
+                    if (f->half_space.normal[DIM - 1] < 0) {
+                        out << "[" << f->vertices[0] << ", " << f->vertices[1] << ", " << f->vertices[2] << "],"
                             << std::endl;
-                        out << "[" << f.vertices[0] << ", " << f.vertices[1] << ", " << f.vertices[3] << "],"
+                        out << "[" << f->vertices[0] << ", " << f->vertices[1] << ", " << f->vertices[3] << "],"
                             << std::endl;
-                        out << "[" << f.vertices[0] << ", " << f.vertices[2] << ", " << f.vertices[3] << "],"
+                        out << "[" << f->vertices[0] << ", " << f->vertices[2] << ", " << f->vertices[3] << "],"
                             << std::endl;
-                        out << "[" << f.vertices[1] << ", " << f.vertices[2] << ", " << f.vertices[3] << "],"
+                        out << "[" << f->vertices[1] << ", " << f->vertices[2] << ", " << f->vertices[3] << "],"
                             << std::endl;
                     }
                 }
@@ -375,23 +369,51 @@ namespace vx {
             }
             if (DIM == 3) {
                 out << "let data = { \"v\":[\n";
-                for (auto p : ctx.p) {
+                for (auto p : points) {
                     out << "[" << p[0] << "," << p[1] << "," << p[2] << "]," << std::endl;
                 }
                 out << "[0,0,0]], \"f\": [\n";
-                for (size_t i = 0; i < facets.size(); i++) {
-                    auto f = facets[i];
-                    //if (f.normal[DIM - 1] < 0)
-                        out << "[" << f.vertices[0] << ", " << f.vertices[1] << ", " << f.vertices[2]
-                            << (i + 1 == facets.size() ? "]": "],")
-                            << std::endl;
+                for (auto f : facets) {
+                    //if (f.half_space.normal[DIM - 1] < 0)
+                    out << "[" << f->vertices[0] << ", " << f->vertices[1] << ", " << f->vertices[2]
+                        << "],"
+                        << std::endl;
                 }
                 out << "]}";
             }
 
         }
 
+        Polyhedron<T, DIM> getHull() {
+            Polyhedron<T, DIM> res;
+            res.points = points;
+            res.ctx = ctx;
+            for (auto facet: facets) {
+                VerticesList<DIM> vertices{};
+                std::copy_n(facet->vertices, DIM, vertices.vertices);
+                res.facets.push_back(vertices);
+            }
+            return res;
+        }
+
     };
+
+
+    template<typename T, size_t DIM>
+    Polyhedron<T, DIM> makePolyhedron(const std::vector<HalfSpace<T, DIM>> &half_spaces, const Vec<T, DIM> &center) {
+        std::vector<Vec<T, DIM>> dual_vertices;
+        for (auto hs : half_spaces) {
+            auto offset = hs.offset - dot(center, hs.normal);
+            dual_vertices.push_back(hs.normal / offset);
+        }
+        QHull<T, DIM> dual_qhull(dual_vertices);
+        std::vector<Vec<T, DIM>> result_vertices;
+        for (auto facet : dual_qhull.facets) {
+            result_vertices.push_back(facet->half_space.normal / facet->half_space.offset + center);
+        }
+        QHull<T, DIM> result_qhull(result_vertices);
+        return result_qhull.getHull();
+    }
 
 
 }
