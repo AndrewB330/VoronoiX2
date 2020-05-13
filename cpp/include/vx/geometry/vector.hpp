@@ -1,5 +1,5 @@
-#ifndef VORONOIX_VEC_HPP
-#define VORONOIX_VEC_HPP
+#ifndef VORONOIX_VECTOR_HPP
+#define VORONOIX_VECTOR_HPP
 
 #include <iostream>
 #include <optional>
@@ -112,7 +112,7 @@ namespace vx {
 
     template<typename T, size_t DIM>
     bool operator<(const Vec<T, DIM> &a, const Vec<T, DIM> &b) {
-        for(size_t i = 0; i < DIM; i++) {
+        for (size_t i = 0; i < DIM; i++) {
             if (a[i] != b[i]) return a[i] < b[i];
         }
         return false;
@@ -120,7 +120,7 @@ namespace vx {
 
     template<typename T, size_t DIM>
     bool operator==(const Vec<T, DIM> &a, const Vec<T, DIM> &b) {
-        for(size_t i = 0; i < DIM; i++) {
+        for (size_t i = 0; i < DIM; i++) {
             if (a[i] != b[i]) return false;
         }
         return true;
@@ -156,20 +156,46 @@ namespace vx {
     }
 
     template<typename T, size_t DIM>
-    Vec<T, DIM> vec_ones() {
-        Vec<T, DIM> v;
-        for (size_t i = 0; i < DIM; i++) v[i] = T(1);
-        return v;
-    }
-
-
-    template<typename T, size_t DIM>
     std::ostream &operator<<(std::ostream &out, const Vec<T, DIM> &v) {
         out << '(';
         for (size_t i = 0; i < DIM; i++)
             out << v[i] << (i + 1 < DIM ? ", " : ")");
         return out;
     }
+
+    template<typename T>
+    inline T cross_product(const vx::Vec<T, 2> &a, const vx::Vec<T, 2> &b) {
+        return a.x * b.y - a.y * b.x;
+    }
+
+    template<typename T>
+    inline T cross_product(const vx::Vec<T, 2> &a, const vx::Vec<T, 2> &b, const vx::Vec<T, 2> &c) {
+        return (a.x - c.x) * (b.y - c.y) - (a.y - c.y) * (b.x - c.x);
+    }
+
+    template<typename T>
+    bool is_inside(const vx::Vec<T, 2> &a, const vx::Vec<T, 2> &b, const vx::Vec<T, 2> &c, const vx::Vec<T, 2> &o) {
+        return cross_product(b - a, o - a) > 0 &&
+               cross_product(c - b, o - b) > 0 &&
+               cross_product(a - c, o - c) > 0;
+        // TODO: check epsilon
+    }
+
+    template<typename T>
+    vx::Vec<T, 3> cross_product(const vx::Vec<T, 3> &a, const vx::Vec<T, 3> &b) {
+        return vx::Vec<T, 3>(a.y * b.z - a.z * b.y, a.x * b.z - a.z * b.x, a.x * b.y - a.y * b.x);
+    }
+
+    template<typename T, size_t DIM>
+    struct CmpReversed {
+        bool operator()(const vx::Vec<T, DIM> &a, const vx::Vec<T, DIM> &b) const {
+            for (size_t i = DIM; i > 0; i--) {
+                if (a[i - 1] != b[i - 1]) return a[i - 1] < b[i - 1];
+            }
+            return false;
+        }
+    };
+
 } // namespace vx
 
-#endif //VORONOIX_VEC_HPP
+#endif //VORONOIX_VECTOR_HPP

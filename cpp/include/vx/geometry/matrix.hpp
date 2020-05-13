@@ -1,11 +1,12 @@
-#ifndef VORONOIX_MAT_HPP
-#define VORONOIX_MAT_HPP
+#ifndef VORONOIX_MATRIX_HPP
+#define VORONOIX_MATRIX_HPP
 
 #include <iostream>
 #include <cassert>
 #include <memory>
+#include <vector>
 
-#include "vec.hpp"
+#include "vector.hpp"
 
 namespace vx {
 
@@ -89,8 +90,32 @@ namespace vx {
         return out;
     }
 
-    template<typename T, size_t DIM>
-    T det(const Mat<T, DIM, DIM> &mat) {
+    template<typename T>
+    struct VMat {
+        size_t rows, cols;
+        std::vector<T> data;
+
+        VMat(size_t rows = 0, size_t cols = 0) : rows(rows), cols(cols) {
+            data.assign(rows * cols, T(0));
+        }
+
+        const T *operator[](size_t i) const {
+            return &data[0] + i * cols;
+        }
+
+        T *operator[](size_t i) {
+            return &data[0] + i * cols;
+        }
+
+        void swap_rows(size_t i, size_t j) {
+            for (size_t k = 0; k < cols; k++)
+                std::swap(data[i * cols + k], data[j * cols + k]);
+        }
+    };
+
+
+    template<typename T, typename MatType>
+    T det(const MatType &mat, size_t DIM) {
         T eps = 1e-08;
         T res = T(1);
         auto det_mat = mat;
@@ -124,6 +149,11 @@ namespace vx {
         return res;
     }
 
+    template<typename T, size_t DIM>
+    T det(const Mat<T, DIM, DIM> &mat) {
+        return det<T>(mat, DIM);
+    }
+
     template<typename T>
     T det(const Mat<T, 2, 2> &mat) {
         return mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0];
@@ -136,6 +166,12 @@ namespace vx {
                mat[0][2] * (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]);
     }
 
-}
+    template<typename T>
+    T det(const VMat<T> &mat) {
+        assert(mat.cols == mat.rows);
+        return det<T>(mat, mat.cols);
+    }
 
-#endif //VORONOIX_MAT_HPP
+} // namespace vx
+
+#endif //VORONOIX_MATRIX_HPP

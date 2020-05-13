@@ -3,3 +3,9 @@
 
 cpp/cmake-build-debug
 cpp/cmake-build-release
+
+*.sln
+*.vcxproj
+*.vcxproj.*
+**/.vs/
+CMakeSettings.json
