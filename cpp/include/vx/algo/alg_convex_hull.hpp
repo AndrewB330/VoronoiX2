@@ -11,7 +11,9 @@ namespace vx {
     public:
         explicit ConvexHull(const std::vector<vx::Vec<T, DIM>> &points);
 
-        std::vector<std::array<size_t, 2>> getFacets();
+        std::vector<std::array<size_t, DIM>> getFacets();
+
+        std::vector<vx::HalfSpace<T, DIM>> getHalfSpaces();
 
         size_t getSize();
 
@@ -28,12 +30,15 @@ namespace vx {
 
         std::vector<std::array<size_t, 2>> getFacets();
 
+        std::vector<vx::HalfSpace<T, 2>> getHalfSpaces();
+
         size_t getSize();
 
         bool verify(const std::vector<vx::Vec<T, 2>> &points);
 
     private:
         vx::ConvexHull2D<T> convex_hull;
+        std::vector<Vec<T, 2>> points;
     };
 
     /*
@@ -46,7 +51,7 @@ namespace vx {
     ConvexHull<T, DIM>::ConvexHull(const std::vector<vx::Vec<T, DIM>> &points):quick_hull(points) {}
 
     template<typename T, size_t DIM>
-    std::vector<std::array<size_t, 2>> ConvexHull<T, DIM>::getFacets() {
+    std::vector<std::array<size_t, DIM>> ConvexHull<T, DIM>::getFacets() {
         return quick_hull.getFacets();
     }
 
@@ -60,13 +65,30 @@ namespace vx {
         return quick_hull.getFacets().size(); // TODO: optimize
     }
 
+    template<typename T, size_t DIM>
+    std::vector<HalfSpace<T, DIM>> ConvexHull<T, DIM>::getHalfSpaces() {
+        return quick_hull.getHalfSpaces();
+    }
+
     template<typename T>
-    ConvexHull<T, 2>::ConvexHull(const std::vector<Vec<T, 2>> &points):convex_hull(GrahamScan(points)) {}
+    ConvexHull<T, 2>::ConvexHull(const std::vector<Vec<T, 2>> &points):convex_hull(GrahamScan(points)), points(points) {}
 
 
     template<typename T>
     std::vector<std::array<size_t, 2>> ConvexHull<T, 2>::getFacets() {
         return convex_hull.getSegments();
+    }
+
+    template<typename T>
+    std::vector<HalfSpace<T, 2>> ConvexHull<T, 2>::getHalfSpaces() {
+        std::vector<HalfSpace<T, 2>> hs;
+        for(auto & facet : convex_hull.getSegments()) {
+            auto dif = points[facet[1]] - points[facet[0]];
+            auto len = length(dif);
+            auto normal = Vec<T, 2>(-dif.y, dif.x) / len;
+            hs.emplace_back(normal, len);
+        }
+        return hs;
     }
 
     template<typename T>

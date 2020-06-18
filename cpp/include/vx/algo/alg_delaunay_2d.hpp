@@ -1,9 +1,10 @@
-#ifndef VORONOIX_VX_BUILDER_2D_HPP
-#define VORONOIX_VX_BUILDER_2D_HPP
+#ifndef VORONOIX_ALG_DELAUNAY_2D_HPP
+#define VORONOIX_ALG_DELAUNAY_2D_HPP
 
 #include <vector>
 #include <array>
 #include <vx/geometry/vector.hpp>
+#include <vx/geometry/polyhedron.hpp>
 #include <vx/utils.hpp>
 #include <algorithm>
 
@@ -217,7 +218,7 @@ namespace vx {
         facets_neighbour.reserve(max_number_of_triangles);
         facets_neighbour_sides.reserve(max_number_of_triangles);
 
-        q.reserve(max_number_of_triangles + 100); // todo: not enough in WORST case
+        q.reserve(3*max_number_of_triangles + 100); // todo: not enough in WORST case
 
         min_x = points[0].x, max_x = points[0].x, min_y = points[0].y, max_y = points[0].y;
         for (const auto &p : points) {
@@ -298,6 +299,7 @@ namespace vx {
 
         std::vector<size_t> new_id(facets_vertices.size());
         size_t valid_faces_num = 0;
+        std::vector<size_t> bb;
         for (size_t i = 0; i < facets_vertices.size(); i++) {
             bool is_valid = std::all_of(
                     facets_vertices[i].begin(),
@@ -312,8 +314,19 @@ namespace vx {
                 ++valid_faces_num;
             } else {
                 new_id[i] = vx::NO_PTR;
+                for(int k = 0; k < 3; k++)
+                if (!isBoundingPoint(facets_vertices[i][k]))
+                    bb.push_back(facets_vertices[i][k]);
             }
         }
+        std::sort(bb.begin(), bb.end());
+        auto en = std::unique(bb.begin(), bb.end());
+        bb.erase(en, bb.end());
+        std::vector<Vec<T, 2>> pts;
+        for(auto i : bb) pts.push_back(points[i]);
+        vx::GrahamScan<T> ch(pts);
+        std::cerr << ch.getVertices().size() << std::endl;
+
         facets_vertices.resize(valid_faces_num);
         facets_neighbour.resize(valid_faces_num);
         facets_neighbour_sides.resize(valid_faces_num);
@@ -327,6 +340,18 @@ namespace vx {
         graph.facets_adjacent.swap(facets_neighbour);
         graph.facets_adjacent_side.swap(facets_neighbour_sides);
         graph.points.swap(points);
+
+        graph.adjacent_points.resize(graph.points.size());
+        for(int i = 0; i < graph.points.size(); i++) {
+            graph.adjacent_points[i].reserve(4);
+        }
+
+        for(const auto & vertices : graph.facets_vertices) {
+            for(uint8_t side = 0; side < 3; side++) {
+                graph.adjacent_points[vertices[side]].push_back(vertices[vx::NEXT_PTR_3[side]]);
+                graph.adjacent_points[vertices[side]].push_back(vertices[vx::PREV_PTR_3[side]]);
+            }
+        }
         // todo: vertices and edges
     }
 
@@ -345,6 +370,29 @@ namespace vx {
         return graph;
     }
 
+    template<typename T>
+    std::vector<vx::Polyhedron<T, 2>> voronoi(const std::vector<Vec<T, 2>> & points, T offset) {
+        std::vector<vx::Polyhedron<T, 2>> res;
+        auto delaunay = Delaunay2D<T>(points).getGraph();
+        for(int i = 0; i < delaunay.numVertices(); i++) {
+            std::vector<HalfSpace<T, 2>> hs;
+            hs.emplace_back(vx::Vec<T, 2>(1, 0), 4000);
+            hs.emplace_back(vx::Vec<T, 2>(-1, 0), 4000);
+            hs.emplace_back(vx::Vec<T, 2>(0, 1), 4000);
+            hs.emplace_back(vx::Vec<T, 2>(0, -1), 4000);
+            auto a = delaunay.getVertex(i).getPoint();
+            for(DelaunayVertex<T, 2> & v : delaunay.getVertex(i).getAdjacentVertices()) {
+                auto b = v.getPoint();
+                auto dif = b - a;
+                auto len = length(dif);
+                auto dir = dif / len;
+                hs.emplace_back(dir, len/2 - offset + dot(a, dir));
+            }
+            res.push_back(makePolyhedron(hs, a));
+        }
+        return res;
+    }
+
 } // namespace vx
 
-#endif //VORONOIX_VX_BUILDER_2D_HPP
+#endif //VORONOIX_ALG_DELAUNAY_2D_HPP

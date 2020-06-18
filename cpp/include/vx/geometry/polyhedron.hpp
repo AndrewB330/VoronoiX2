@@ -42,7 +42,7 @@ namespace vx {
 
     template<typename T, size_t DIM>
     vx::Polyhedron<T, DIM> makePolyhedron(const std::vector<vx::Vec<T, DIM>> &points) {
-        vx::QuickHull<T, DIM> hull(points);
+        vx::ConvexHull<T, DIM> hull(points);
         return vx::Polyhedron<T, DIM>(points, hull.getFacets());
     }
 
@@ -58,7 +58,7 @@ namespace vx {
             auto offset = hs.offset - dot(inside, hs.normal);
             dual_vertices.push_back(hs.normal / offset);
         }
-        vx::QuickHull<T, DIM> dual_hull(dual_vertices);
+        vx::ConvexHull<T, DIM> dual_hull(dual_vertices);
 
         std::vector<Vec<T, DIM>> result_vertices;
         for (const auto &hs: dual_hull.getHalfSpaces()) {

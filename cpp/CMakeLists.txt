@@ -14,7 +14,7 @@ set(
         include/vx/algo/alg_convex_hull.hpp
         include/vx/algo/alg_convex_hull_2d.hpp
         include/vx/algo/alg_convex_hull_kd.hpp
-        include/vx/algo/vx_builder_2d.hpp
+        include/vx/algo/alg_delaunay_2d.hpp
         include/vx/algo/graph_delaunay.hpp
         include/vx/algo/alg_voronoi_2d.hpp
         include/vx/algo/graph_voronoi.hpp

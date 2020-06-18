@@ -1,8 +1,7 @@
 #ifndef VORONOIX_VORONOID_2D_HPP
 #define VORONOIX_VORONOID_2D_HPP
 
-#include "vx_builder_2d.hpp"
-#include "alg_voronoi_kd.hpp"
+#include "alg_delaunay_2d.hpp"
 #include "graph_voronoi.hpp"
 
 namespace vx {
@@ -73,11 +72,13 @@ namespace vx {
     template<typename T>
     bool
     Voronoi2D<T>::buildRegion(size_t site, size_t triangle, size_t side, const vx::DelaunayGraph_<T, 2> &delaunay) {
-        auto &junction_points = graph.junctions
-        auto &regions = graph.regions;
-        const auto &facets = delaunay.facets;
+        auto &junction_points = graph.junctions;
+        auto &adjacent_sites = graph.adjacent_sites;
+        auto &adjacent_ridges = graph.adjacent_ridges;
 
-        if (regions[site].vertices.empty()) {
+        //const auto &facets = delaunay.facets;
+
+        /*if (graph.d[site].vertices.empty()) {
             size_t cur_side = side;
             do {
                 const auto &face = facets[triangle];
@@ -96,7 +97,7 @@ namespace vx {
 
             if (triangle == vx::NO_PTR)
                 regions[site].vertices = {vx::NO_PTR};
-        }
+        }*/
         return true;
     }
 

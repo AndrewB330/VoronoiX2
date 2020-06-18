@@ -4,7 +4,6 @@
 #include <vx/geometry/vector.hpp>
 #include <vector>
 #include <array>
-#include "alg_voronoi_kd.hpp"
 
 namespace vx {
 
@@ -52,8 +51,6 @@ namespace vx {
         std::vector<std::array<size_t, DIM + 1>> facets_adjacent;
         std::vector<std::array<size_t, DIM + 1>> facets_adjacent_side;
 
-        std::vector<std::vector<size_t>> edge;
-
         std::vector<std::vector<size_t>> adjacent_facets;
         std::vector<std::vector<size_t>> adjacent_points;
         std::vector<std::vector<size_t>> adjacent_edges;
@@ -78,8 +75,10 @@ namespace vx {
 
         friend Delaunay2D<T>;
         friend Voronoi2D<T>;
-    protected:
+
         DelaunayVertex(size_t vertex, const DelaunayGraph_<T, DIM> &g) : vertex(vertex), g(g) {}
+
+    protected:
 
         size_t vertex;
         const DelaunayGraph_<T, DIM> &g;
@@ -185,7 +184,7 @@ namespace vx {
         std::vector<DelaunayVertex<T, DIM>> adjacent;
         adjacent.reserve(g.adjacent_points[vertex].size());
         for (size_t i = 0; i < g.adjacent_points[vertex].size(); i++) {
-            adjacent.push_back(DelaunayVertex<T, DIM>(g.adjacent_points[i], g));
+            adjacent.emplace_back(g.adjacent_points[vertex][i], g);
         }
         return adjacent;
     }
@@ -217,7 +216,7 @@ namespace vx {
 
     template<typename T, size_t DIM>
     DelaunayVertex<T, DIM> DelaunayEdge<T, DIM>::getVertexTo() const {
-        return DelaunayVertex<T, DIM>(g.adjacent_points[vertex], g);
+        return DelaunayVertex<T, DIM>(g.adjacent_points[vertex][adj_index], g);
     }
 
     template<typename T, size_t DIM>

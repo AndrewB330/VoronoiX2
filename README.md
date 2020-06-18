@@ -11,21 +11,21 @@ other geometric structures.
 [blog](https://11011110.github.io/blog/2011/03/16/halfspace-intersections-and.html),
 [wiki](https://en.wikipedia.org/wiki/Duality_(projective_geometry))
 - [ ] Support of various spaces (even with curvature)
-    - [ ] 2D Plane
-    - [ ] 3D Space
-    - [ ] kD Hyperspace
-    - [ ] Sphere
+    - [x] 2D Plane
+    - [x] 3D Space
+    - [x] kD Hyperspace
+    - [x] Sphere
     - [ ] Cube
 - [ ] Various geometric structures and algorithms
-    - [ ] Voronoi diagram
-    - [ ] Delaunay triangulation
-    - [ ] Euclidean minimal spanning tree
-    - [ ] Minimal empty circle
-    - [ ] Nearest point
-    - [ ] Safest path
-    - [ ] Convex hull
+    - [x] Voronoi diagram
+    - [x] Delaunay triangulation
+    - [x] Euclidean minimal spanning tree
+    - [x] Minimal empty circle
+    - [x] Nearest point
+    - [x] Safest path
+    - [x] Convex hull
 - [ ] Robustness (HOPEFULLY :D )
-- [ ] C++ library
+- [x] C++ library
 - [ ] JS binding
 ### Images and GIFs
 3D Voronoi diagram inside a cube
